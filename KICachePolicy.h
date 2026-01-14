@@ -1,4 +1,4 @@
-#pragma once
+#pragma once // 防止头文件频繁包含
 
 namespace KamaCache
 {
