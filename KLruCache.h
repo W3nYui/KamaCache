@@ -11,20 +11,38 @@
 namespace KamaCache
 {
 
-// 前向声明
+// 前向声明 由于KLruCache在LruNode后才定义，而LruNode中需要使用KLruCache作为友元类，因此前向定义
 template<typename Key, typename Value> class KLruCache;
 
+/**
+ * @brief LRU 缓存的双向链表节点类
+ * * 核心设计：
+ * 1. 采用模板编程，支持任意类型的 Key 和 Value。
+ * 2. 使用智能指针管理链表关系，自动处理内存释放 (RAII)。
+ * 3. 记录 accessCount，为进阶的缓存淘汰算法 (如 LRU-K) 预留接口。
+ */
 template<typename Key, typename Value>
 class LruNode 
 {
 private:
-    Key key_;
-    Value value_;
+    Key key_;             // 存储键，用于反向在 Hash 表中查找并删除
+    Value value_;         // 存储实际数据
     size_t accessCount_;  // 访问次数
+    /**
+     * @brief 前向指针 (Previous Pointer)
+     * @note 关键点：使用 std::weak_ptr 防止循环引用 (Cyclic Reference)。
+     * 如果这里用 shared_ptr，两个节点互相引用，引用计数永远不为0，导致内存泄漏。
+     */
     std::weak_ptr<LruNode<Key, Value>> prev_;  // 改为weak_ptr打破循环引用
+    /**
+     * @brief 后向指针 (Next Pointer)
+     * @note 使用 std::shared_ptr 表达"强所有权"。
+     * 当前节点"拥有"下一个节点的生命周期的一部分。
+     */
     std::shared_ptr<LruNode<Key, Value>> next_;
 
 public:
+    /// 构造函数：初始化键值对，默认引用计数为 1
     LruNode(Key key, Value value)
         : key_(key)
         , value_(value)
@@ -32,12 +50,14 @@ public:
     {}
 
     // 提供必要的访问器
+    // 在访问器的设计，外层加 const，保证不修改成员变量
     Key getKey() const { return key_; }
     Value getValue() const { return value_; }
+    // Set 方法用于更新缓存值
     void setValue(const Value& value) { value_ = value; }
     size_t getAccessCount() const { return accessCount_; }
     void incrementAccessCount() { ++accessCount_; }
-
+    // 友元声明，允许 KLruCache 访问私有成员
     friend class KLruCache<Key, Value>;
 };
 
