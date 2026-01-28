@@ -334,19 +334,22 @@ template<typename Key, typename Value>
 class KHashLruCaches
 {
 public:
+    // Hash分片LRU缓存构造函数
+    // 外部输入总容量与分片数量
     KHashLruCaches(size_t capacity, int sliceNum)
         : capacity_(capacity)
-        , sliceNum_(sliceNum > 0 ? sliceNum : std::thread::hardware_concurrency())
+        , sliceNum_(sliceNum > 0 ? sliceNum : std::thread::hardware_concurrency()) // 如果sliceNum小于等于0，则使用硬件并发线程数作为分片数量
     {
         size_t sliceSize = std::ceil(capacity / static_cast<double>(sliceNum_)); // 获取每个分片的大小
         for (int i = 0; i < sliceNum_; ++i)
         {
-            lruSliceCaches_.emplace_back(new KLruCache<Key, Value>(sliceSize)); 
+            lruSliceCaches_.emplace_back(new KLruCache<Key, Value>(sliceSize)); // 将每个分片的LRU缓存加入到切片缓存数组中
         }
     }
-
+    // 由于没有继承，因此是KHashLruCaches类的操作函数: put get
     void put(Key key, Value value)
     {
+        // 利用key的hash值进行分片
         // 获取key的hash值，并计算出对应的分片索引
         size_t sliceIndex = Hash(key) % sliceNum_;
         lruSliceCaches_[sliceIndex]->put(key, value);
@@ -362,7 +365,7 @@ public:
     Value get(Key key)
     {
         Value value;
-        memset(&value, 0, sizeof(value));
+        // memset(&value, 0, sizeof(value)); // 由于是模板类，对于复杂类型（如 string）使用 memset 可能会破坏对象的内部结构
         get(key, value);
         return value;
     }
