@@ -15,6 +15,10 @@ namespace KamaCache
 template<typename Key, typename Value> class KLfuCache;
 
 template<typename Key, typename Value>
+/**
+ * @brief 频次列表
+ * 
+ */
 class FreqList
 {
 private:
@@ -151,7 +155,7 @@ public:
       return value;
     }
 
-      // 清空缓存,回收资源
+    // 清空缓存,回收资源
     void purge()
     {
       nodeMap_.clear();
@@ -187,16 +191,17 @@ template<typename Key, typename Value>
 void KLfuCache<Key, Value>::getInternal(NodePtr node, Value& value)
 {
     // 找到之后需要将其从低访问频次的链表中删除，并且添加到+1的访问频次链表中，
-    // 访问频次+1, 然后把value值返回
+    // 获得目标数值
     value = node->value;
     // 从原有访问频次的链表中删除节点
     removeFromFreqList(node); 
-    // 提升其频次 插入新的频次列表中
+    // 提升其频次
     node->freq++;
+    // 插入新的频次列表中
     addToFreqList(node);
     // 如果当前node的访问频次如果等于minFreq+1，并且其前驱链表为空，则说明
     // freqToFreqList_[node->freq - 1]链表因node的迁移已经空了，需要更新最小访问频次
-    if (node->freq - 1 == minFreq_ && freqToFreqList_[node->freq - 1]->isEmpty())
+    if (node->freq - 1 == minFreq_ && freqToFreqList_[node->freq - 1]->isEmpty()) // 检验前一频次链表是否为空 避免内存爆炸
         minFreq_++;
 
     // 总访问频次和当前平均访问频次都随之增加
@@ -209,7 +214,7 @@ void KLfuCache<Key, Value>::putInternal(Key key, Value value)
     // 如果不在缓存中，则需要判断缓存是否已满
     if (nodeMap_.size() == capacity_)
     {
-        // 缓存已满，删除最不常访问的结点，更新当前平均访问频次和总访问频次
+        // 缓存已满，删除最少最不常访问的结点，更新当前平均访问频次和总访问频次
         kickOut();
     }
     
@@ -217,13 +222,14 @@ void KLfuCache<Key, Value>::putInternal(Key key, Value value)
     NodePtr node = std::make_shared<Node>(key, value); // 初始化一个新的节点 其节点的频次为1
     nodeMap_[key] = node;
     addToFreqList(node); // 添加到频次链表
-    addFreqNum();
-    minFreq_ = std::min(minFreq_, 1);
+    addFreqNum();        // 增加访问频次
+    minFreq_ = std::min(minFreq_, 1); // 由于是加入新节点 因此一定是仅有1次访问，因此更新最小访问频次
 }
 
 template<typename Key, typename Value>
 void KLfuCache<Key, Value>::kickOut()
 {
+    // 由于一直维护最小访问频次 因此可以O(1)的直接找到节点 直接删除头结点：即最小访问频次下的最久未访问节点
     NodePtr node = freqToFreqList_[minFreq_]->getFirstNode();
     removeFromFreqList(node);
     nodeMap_.erase(node->key);
@@ -263,12 +269,12 @@ template<typename Key, typename Value>
 void KLfuCache<Key, Value>::addFreqNum()
 {
     curTotalNum_++;
-    if (nodeMap_.empty())
+    if (nodeMap_.empty()) // nodeMap存了所有Node指针 为空则没有任何访问
         curAverageNum_ = 0;
     else
         curAverageNum_ = curTotalNum_ / nodeMap_.size();
 
-    if (curAverageNum_ > maxAverageNum_)
+    if (curAverageNum_ > maxAverageNum_) // 出现访问爆炸的情况
     {
        handleOverMaxAverageNum();
     }
@@ -286,13 +292,16 @@ void KLfuCache<Key, Value>::decreaseFreqNum(int num)
 }
 
 template<typename Key, typename Value>
+/**
+ * @brief 处理当实时平均访问频率超过上限的访问爆炸情形
+ */
 void KLfuCache<Key, Value>::handleOverMaxAverageNum()
 {
-    if (nodeMap_.empty())
+    if (nodeMap_.empty()) // 避免误触发
         return;
 
     // 当前平均访问频次已经超过了最大平均访问频次，所有结点的访问频次- (maxAverageNum_ / 2)
-    for (auto it = nodeMap_.begin(); it != nodeMap_.end(); ++it)
+    for (auto it = nodeMap_.begin(); it != nodeMap_.end(); ++it) // 对访问哈希表的所有节点进行频率衰减 即全员降级
     {
         // 检查结点是否为空
         if (!it->second)
@@ -316,8 +325,13 @@ void KLfuCache<Key, Value>::handleOverMaxAverageNum()
 }
 
 template<typename Key, typename Value>
+/**
+ * @brief 更新最小频次
+ * 
+ */
 void KLfuCache<Key, Value>::updateMinFreq() 
 {
+    // 初始化为一个不可能达到的大数
     minFreq_ = INT8_MAX;
     for (const auto& pair : freqToFreqList_) 
     {
@@ -326,6 +340,8 @@ void KLfuCache<Key, Value>::updateMinFreq()
             minFreq_ = std::min(minFreq_, pair.first);
         }
     }
+    // 仅在for()逻辑一次也未执行时达到，即缓存为空
+    // 在这种情况下，将其重置为 1 是最安全的选择。因为下一个插入的新节点频率必然是 1。这样可以保证系统状态的连贯性。
     if (minFreq_ == INT8_MAX) 
         minFreq_ = 1;
 }
@@ -335,24 +351,34 @@ template<typename Key, typename Value>
 class KHashLfuCache
 {
 public:
+    /**
+     * @brief 构造函数
+     * 
+     * @param capacity 缓存总容量
+     * @param sliceNum 定义的哈希分片数
+     * @param maxAverageNum 每个分片的最大平均访问频次 用于全员降级与上限保护
+     */
     KHashLfuCache(size_t capacity, int sliceNum, int maxAverageNum = 10)
         : sliceNum_(sliceNum > 0 ? sliceNum : std::thread::hardware_concurrency())
         , capacity_(capacity)
     {
-        size_t sliceSize = std::ceil(capacity_ / static_cast<double>(sliceNum_)); // 每个lfu分片的容量
+        // 计算每个lfu分片的容量 向上取整
+        size_t sliceSize = std::ceil(capacity_ / static_cast<double>(sliceNum_));
+        // 初始化分片内容 并加入数组
         for (int i = 0; i < sliceNum_; ++i)
         {
             lfuSliceCaches_.emplace_back(new KLfuCache<Key, Value>(sliceSize, maxAverageNum));
         }
     }
-
+    // 定义为KHashLfuCache的接口，而不是继承，在调用的同时再触发对应分片的put函数，让该分片自动管理内存。
+    // 调用对应分片的put函数
     void put(Key key, Value value)
     {
         // 根据key找出对应的lfu分片
         size_t sliceIndex = Hash(key) % sliceNum_;
         lfuSliceCaches_[sliceIndex]->put(key, value);
     }
-
+    // 调用对应分片的get函数
     bool get(Key key, Value& value)
     {
         // 根据key找出对应的lfu分片
