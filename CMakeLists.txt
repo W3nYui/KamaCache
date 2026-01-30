@@ -38,7 +38,7 @@ foreach(src ${ALL_SOURCES})
     endif()
 endforeach()
 
-# 打印调试信息，让你知道具体编译了哪些文件
+# 打印调试信息
 message(STATUS "Compiling Sources: ${SOURCES}")
 
 # 设置目标可执行文件
