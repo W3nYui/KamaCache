@@ -71,6 +71,10 @@ void testHotDataAccess() {
     KamaCache::KLruKCache<int, std::string> lruk(CAPACITY, HOT_KEYS + COLD_KEYS, 2);
     KamaCache::KLfuCache<int, std::string> lfuAging(CAPACITY, 20000);
 
+    /**
+     * @brief 一种更现代的随机数生成方法
+     * 
+     */
     std::random_device rd;
     std::mt19937 gen(rd());
     

@@ -5,6 +5,10 @@
 namespace KamaCache 
 {
 
+/**
+ * @brief 定义ARC节点
+ * @note  利用智能指针，实现RALL的双向节点管理
+ */
 template<typename Key, typename Value>
 class ArcNode 
 {
