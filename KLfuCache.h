@@ -6,6 +6,8 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <climits>
+#include <algorithm>
 
 #include "KICachePolicy.h"
 

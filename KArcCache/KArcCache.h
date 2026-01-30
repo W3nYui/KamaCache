@@ -14,8 +14,9 @@ class KArcCache : public KICachePolicy<Key, Value>
 {
 public:
     /**
-     * @brief 构造函数 构造Arc内部的LRU与LFU部分 两者初始缓存大小为10 同时晋升阈值为2
-     * 
+     * @brief 构造函数 构造Arc内部的LRU与LFU部分 两者初始缓存大小为10 同时晋升阈值为2。
+     * 默认带参构造，如果没有传入参数，则以 capacity = 10，transformThreshold = 2的数据进行构造。
+     * 且采用 explicit 显式构造，定义必须KArcCache<> cache(50);来完成单参构造。
      * @param capacity 
      * @param transformThreshold 
      */
@@ -24,7 +25,10 @@ public:
         , transformThreshold_(transformThreshold)
         , lruPart_(std::make_unique<ArcLruPart<Key, Value>>(capacity, transformThreshold))
         , lfuPart_(std::make_unique<ArcLfuPart<Key, Value>>(capacity, transformThreshold))
-    {}
+    {
+        // lruPart_ = std::make_unique<ArcLruPart<Key, Value>>(capacity, transformThreshold);
+        // lfuPart_ = std::make_unique<ArcLfuPart<Key, Value>>(capacity, transformThreshold);
+    }
 
     ~KArcCache() override = default;
 
@@ -117,7 +121,7 @@ private:
     }
 
 private:
-    size_t capacity_;
+    size_t capacity_; // 单个缓存大小
     size_t transformThreshold_;
     std::unique_ptr<ArcLruPart<Key, Value>> lruPart_;
     std::unique_ptr<ArcLfuPart<Key, Value>> lfuPart_;
