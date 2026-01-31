@@ -34,10 +34,11 @@ public:
      * 
      * @param key 
      * @param value 
+     * @param shouldTransform
      * @return true 
      * @return false 
      */
-    bool put(Key key, Value value) 
+    bool put(Key key, Value value, bool& shouldTransform) 
     {
         if (capacity_ == 0) return false;
         // 查找缓存表 更新数据/写入数据
@@ -45,7 +46,8 @@ public:
         auto it = mainCache_.find(key);
         if (it != mainCache_.end()) 
         {
-            return updateExistingNode(it->second, value);
+            shouldTransform = checkTransform(it->second);
+            return updateExistingNode(it->second, value); // 更新
         }
         return addNewNode(key, value);
     }
@@ -112,6 +114,19 @@ public:
         return true;
     }
 
+    void deleteNodeFromMain(Key key) {
+        auto it = mainCache_.find(key);
+        if (it != mainCache_.end()) {
+            auto node = it->second;
+            if (!node->prev_.expired() && node->next_) {
+            auto prev = node->prev_.lock();
+            prev->next_ = node->next_;
+            node->next_->prev_ = node->prev_;
+            node->next_ = nullptr; // 清空指针，防止悬垂引用
+            }
+        }
+    }
+
 private:
     /**
      * @brief 初始化函数 构造缓存表与幽灵表的哨兵节点
@@ -160,6 +175,16 @@ private:
     bool updateNodeAccess(NodePtr node) 
     {
         moveToFront(node);
+        node->incrementAccessCount();
+        return node->getAccessCount() >= transformThreshold_;
+    }
+
+    /**
+     * @brief 判断是否需要晋升
+     * 
+     * @param node 
+     */
+    bool checkTransform(NodePtr node) {
         node->incrementAccessCount();
         return node->getAccessCount() >= transformThreshold_;
     }

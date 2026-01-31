@@ -5,6 +5,11 @@
 #include <iomanip>
 #include <random>
 #include <algorithm>
+#include <array>
+// Windows 平台特定头文件，用于设置控制台 UTF-8 编码
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "KICachePolicy.h"
 #include "KLfuCache.h"
@@ -283,6 +288,10 @@ void testWorkloadShift() {
 }
 
 int main() {
+    #ifdef _WIN32
+    SetConsoleOutputCP(65001);
+    #endif
+
     testHotDataAccess();
     testLoopPattern();
     testWorkloadShift();

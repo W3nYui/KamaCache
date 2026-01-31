@@ -14,8 +14,9 @@ class KArcCache : public KICachePolicy<Key, Value>
 {
 public:
     /**
-     * @brief 构造函数 构造Arc内部的LRU与LFU部分 两者初始缓存大小为10 同时晋升阈值为2
-     * 
+     * @brief 构造函数 构造Arc内部的LRU与LFU部分 两者初始缓存大小为10 同时晋升阈值为2。
+     * 默认带参构造，如果没有传入参数，则以 capacity = 10，transformThreshold = 2的数据进行构造。
+     * 且采用 explicit 显式构造，定义必须KArcCache<> cache(50);来完成单参构造。
      * @param capacity 
      * @param transformThreshold 
      */
@@ -24,12 +25,15 @@ public:
         , transformThreshold_(transformThreshold)
         , lruPart_(std::make_unique<ArcLruPart<Key, Value>>(capacity, transformThreshold))
         , lfuPart_(std::make_unique<ArcLfuPart<Key, Value>>(capacity, transformThreshold))
-    {}
+    {
+        // lruPart_ = std::make_unique<ArcLruPart<Key, Value>>(capacity, transformThreshold);
+        // lfuPart_ = std::make_unique<ArcLfuPart<Key, Value>>(capacity, transformThreshold);
+    }
 
     ~KArcCache() override = default;
 
     /**
-     * @brief 写入函数
+     * @brief 写入函数 在写入/更新函数中补全了晋升通道
      * 
      * @param key 
      * @param value 
@@ -38,15 +42,17 @@ public:
     {
         checkGhostCaches(key); // 触发幽灵命中 更新缓存空间大小
 
-        // 检查 LFU 部分是否存在该键
-        bool inLfu = lfuPart_->contain(key);
-        // 更新/放入 LRU 部分缓存
-        lruPart_->put(key, value);
-        // 如果 LFU 部分存在该键，则更新 LFU 部分 对于这一部分的代码我认为有问题，卡哥的思路是将LRU的内容升级到LFU中，并一起更新
-        // 但是这种一起更新的行为没有维护ARC中LFU与LRU的互斥空间问题。如果LFU数据存在，但是触发了LRU的幽灵命中，那么会导致LFU的空间反而被缩减。
+        bool inLfu = lfuPart_->contain(key); // 检查 LFU 部分是否存在该键
         if (inLfu) 
         {
-            lfuPart_->put(key, value);
+            lfuPart_->put(key, value); // lfu 更新 lfu的插入只由LRU控制
+        } else {
+            bool shouldTransform = false; // 检查是否需要晋升
+            lruPart_->put(key, value, shouldTransform);
+            if (shouldTransform) { // 判断晋升
+                lruPart_->deleteNodeFromMain(key);
+                lfuPart_->put(key, value);
+            }
         }
     }
 
@@ -68,6 +74,7 @@ public:
         {
             if (shouldTransform) 
             {
+                lruPart_->deleteNodeFromMain(key);
                 lfuPart_->put(key, value);
             }
             return true;
@@ -117,7 +124,7 @@ private:
     }
 
 private:
-    size_t capacity_;
+    size_t capacity_; // 单个缓存大小
     size_t transformThreshold_;
     std::unique_ptr<ArcLruPart<Key, Value>> lruPart_;
     std::unique_ptr<ArcLfuPart<Key, Value>> lfuPart_;
